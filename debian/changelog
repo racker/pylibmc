@@ -1,0 +1,29 @@
+pylibmc (1.1.1-1) unstable; urgency=low
+
+  * New upstream version
+  * debian/install
+    - added a more flexible syntax to copy .egg file
+
+ -- Carl Chenet <chaica@ohmytux.com>  Tue, 15 Jun 2010 00:22:39 +0200
+
+pylibmc (1.0-1) unstable; urgency=low
+
+  * New upstream version
+  * debian/source/format
+    - bump to 3.0 source format
+  * debian/control
+    - switched Maintainer to DPMT
+    - switched Uploaders to Carl Chenet <chaica@ohmytux.com>
+    - bump Standards-Version to 3.8.4
+    - added zlib1g-dev in Build-Depends for newly introduced
+      compression support
+  * debian/install
+    - added egg-info file (Closes: #578092)
+
+ -- Carl Chenet <chaica@ohmytux.com>  Mon, 24 May 2010 23:09:52 +0200
+
+pylibmc (0.9.2-1) unstable; urgency=low
+
+  * Initial release. (Closes: #556901)
+
+ -- Carl Chenet <chaica@ohmytux.com>  Sat, 28 Nov 2009 16:33:10 +0100
