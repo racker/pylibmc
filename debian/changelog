@@ -1,10 +1,9 @@
-pylibmc (1.1.1-1) unstable; urgency=low
+pylibmc (1.2.2-1) unstable; urgency=low
 
+  [ Carl Chenet ]
   * New upstream version
-  * debian/install
-    - added a more flexible syntax to copy .egg file
 
- -- Carl Chenet <chaica@ohmytux.com>  Tue, 15 Jun 2010 00:22:39 +0200
+ -- Brandon Philips <brandon.philips@rackspace.com>  Fri, 04 Nov 2011 20:55:46 +0000
 
 pylibmc (1.0-1) unstable; urgency=low
 
