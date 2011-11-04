@@ -41,6 +41,7 @@
 #endif
 
 #define PyBool_TEST(t) ((t) ? Py_True : Py_False)
+
 #define PyModule_ADD_REF(mod, nam, obj) \
     { Py_INCREF(obj); \
       PyModule_AddObject(mod, nam, obj); }
@@ -65,7 +66,7 @@ static PylibMC_Client *PylibMC_ClientType_new(PyTypeObject *type,
 
 static void PylibMC_ClientType_dealloc(PylibMC_Client *self) {
     if (self->mc != NULL) {
-#ifdef LIBMEMCACHED_WITH_SASL_SUPPORT
+#if LIBMEMCACHED_WITH_SASL_SUPPORT
         if (self->sasl_set) {
             memcached_destroy_sasl_auth_data(self->mc);
         }
@@ -98,7 +99,7 @@ static int PylibMC_Client_init(PylibMC_Client *self, PyObject *args,
     /* setup sasl */
     if (user != NULL || pass != NULL) {
 
-#ifdef LIBMEMCACHED_WITH_SASL_SUPPORT
+#if LIBMEMCACHED_WITH_SASL_SUPPORT
         if (user == NULL || pass == NULL) {
             PyErr_SetString(PyExc_TypeError, "SASL requires both username and password");
             goto error;
@@ -1688,7 +1689,7 @@ static PyObject *PylibMC_Client_set_behaviors(PylibMC_Client *self,
         if (r != MEMCACHED_SUCCESS) {
             PyErr_Format(PylibMCExc_MemcachedError,
                          "memcached_behavior_set returned %d for "
-                         "behavior '%.32s' = %llu", r, b->name, v);
+                         "behavior '%.32s' = %u", r, b->name, (unsigned int)v);
             goto error;
         }
     }
@@ -2019,7 +2020,7 @@ static int _PylibMC_CheckKeyStringAndSize(char *key, Py_ssize_t size) {
 }
 
 static int _init_sasl(void) {
-#ifdef LIBMEMCACHED_WITH_SASL_SUPPORT
+#if LIBMEMCACHED_WITH_SASL_SUPPORT
     int rc;
 
     /* sasl_client_init needs to be called once before using SASL, and
@@ -2056,13 +2057,19 @@ static int _init_sasl(void) {
 }
 
 static int _check_libmemcached_version(void) {
-    int libmemcached_version_minor;
+    uint8_t maj, min;
+    char *ver, *dot, *tmp;
 
-    /* Check minimum requirement of libmemcached version */
-    libmemcached_version_minor = \
-        atoi(strchr(LIBMEMCACHED_VERSION_STRING, '.') + 1);
+    ver = dot = strndup(LIBMEMCACHED_VERSION_STRING, 8);
+    while ((tmp = strrchr(ver, '.')) != NULL) {
+        dot = tmp;
+        *dot = 0;
+    }
 
-    if (libmemcached_version_minor < 32) {
+    maj = atoi(ver);
+    min = atoi(dot + 1);
+
+    if (maj == 0 && min < 32) {
         PyErr_Format(PyExc_RuntimeError,
             "pylibmc requires >= libmemcached 0.32, was compiled with %s",
             LIBMEMCACHED_VERSION_STRING);
@@ -2168,13 +2175,17 @@ by using comma-separation. Good luck with that.\n");
     PyModule_AddStringConstant(module,
             "libmemcached_version", LIBMEMCACHED_VERSION_STRING);
 
-#ifdef LIBMEMCACHED_WITH_SASL_SUPPORT
+#if LIBMEMCACHED_WITH_SASL_SUPPORT
     PyModule_ADD_REF(module, "support_sasl", Py_True);
 #else
     PyModule_ADD_REF(module, "support_sasl", Py_False);
 #endif
 
-    PyModule_ADD_REF(module, "support_compression", PyBool_TEST(USE_ZLIB));
+#ifdef USE_ZLIB
+    PyModule_ADD_REF(module, "support_compression", Py_True);
+#else
+    PyModule_ADD_REF(module, "support_compression", Py_False);
+#endif
 
     PyModule_AddIntConstant(module, "server_type_tcp", PYLIBMC_SERVER_TCP);
     PyModule_AddIntConstant(module, "server_type_udp", PYLIBMC_SERVER_UDP);

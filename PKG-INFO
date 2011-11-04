@@ -1,6 +1,6 @@
 Metadata-Version: 1.0
 Name: pylibmc
-Version: 1.2.1
+Version: 1.2.2
 Summary: Quick and small memcached client for Python
 Home-page: http://sendapatch.se/projects/pylibmc/
 Author: Ludvig Ericson
