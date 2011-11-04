@@ -74,14 +74,6 @@ typedef memcached_return (*_PylibMC_IncrCommand)(memcached_st *,
         const char *, size_t, unsigned int, uint64_t*);
 
 typedef struct {
-  char key[MEMCACHED_MAX_KEY];
-  size_t key_len;
-  char *value;
-  size_t value_len;
-  uint32_t flags;
-} pylibmc_mget_result;
-
-typedef struct {
   char *key;
   Py_ssize_t key_len;
   char* value;
@@ -180,21 +172,26 @@ static PylibMC_Behavior PylibMC_behaviors[] = {
     { MEMCACHED_BEHAVIOR_KETAMA, "ketama" },
     { MEMCACHED_BEHAVIOR_KETAMA_WEIGHTED, "ketama_weighted" },
     { MEMCACHED_BEHAVIOR_DISTRIBUTION, "distribution" },
-    { MEMCACHED_BEHAVIOR_CACHE_LOOKUPS, "cache_lookups" },
     { MEMCACHED_BEHAVIOR_SUPPORT_CAS, "cas" },
     { MEMCACHED_BEHAVIOR_BUFFER_REQUESTS, "buffer_requests" },
     { MEMCACHED_BEHAVIOR_VERIFY_KEY, "verify_keys" },
     { MEMCACHED_BEHAVIOR_CONNECT_TIMEOUT, "connect_timeout" },
     { MEMCACHED_BEHAVIOR_SND_TIMEOUT, "send_timeout" },
     { MEMCACHED_BEHAVIOR_RCV_TIMEOUT, "receive_timeout" },
+    { MEMCACHED_BEHAVIOR_NUMBER_OF_REPLICAS, "num_replicas" },
+    { MEMCACHED_BEHAVIOR_AUTO_EJECT_HOSTS, "auto_eject" },
+#if LIBMEMCACHED_VERSION_HEX >= 0x00049000
+    { MEMCACHED_BEHAVIOR_REMOVE_FAILED_SERVERS, "remove_failed" },
+#endif
+    /* make sure failure_limit is set after remove_failed
+     * as the latter overwrites the former. */
     { MEMCACHED_BEHAVIOR_SERVER_FAILURE_LIMIT, "failure_limit" },
+
     { MEMCACHED_BEHAVIOR_IO_MSG_WATERMARK, "_io_msg_watermark" },
     { MEMCACHED_BEHAVIOR_IO_BYTES_WATERMARK, "_io_bytes_watermark" },
     { MEMCACHED_BEHAVIOR_IO_KEY_PREFETCH, "_io_key_prefetch" },
     { MEMCACHED_BEHAVIOR_HASH_WITH_PREFIX_KEY, "_hash_with_prefix_key" },
     { MEMCACHED_BEHAVIOR_NOREPLY, "_noreply" },
-    { MEMCACHED_BEHAVIOR_AUTO_EJECT_HOSTS, "_auto_eject_hosts" },
-    { MEMCACHED_BEHAVIOR_NUMBER_OF_REPLICAS, "_number_of_replicas" },
     { MEMCACHED_BEHAVIOR_SORT_HOSTS, "_sort_hosts" },
     { MEMCACHED_BEHAVIOR_RETRY_TIMEOUT, "_retry_timeout" },
     { MEMCACHED_BEHAVIOR_POLL_TIMEOUT, "_poll_timeout" },
@@ -230,6 +227,7 @@ static PylibMC_Behavior PylibMC_distributions[] = {
 typedef struct {
     PyObject_HEAD
     memcached_st *mc;
+    uint8_t sasl_set;
 } PylibMC_Client;
 
 /* {{{ Prototypes */
@@ -238,11 +236,13 @@ static PylibMC_Client *PylibMC_ClientType_new(PyTypeObject *, PyObject *,
 static void PylibMC_ClientType_dealloc(PylibMC_Client *);
 static int PylibMC_Client_init(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_get(PylibMC_Client *, PyObject *arg);
+static PyObject *PylibMC_Client_gets(PylibMC_Client *, PyObject *arg);
 static PyObject *PylibMC_Client_set(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_replace(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_add(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_prepend(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_append(PylibMC_Client *, PyObject *, PyObject *);
+static PyObject *PylibMC_Client_cas(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_delete(PylibMC_Client *, PyObject *);
 static PyObject *PylibMC_Client_incr(PylibMC_Client *, PyObject *);
 static PyObject *PylibMC_Client_decr(PylibMC_Client *, PyObject *);
@@ -257,6 +257,8 @@ static PyObject *PylibMC_Client_get_stats(PylibMC_Client *, PyObject *);
 static PyObject *PylibMC_Client_flush_all(PylibMC_Client *, PyObject *, PyObject *);
 static PyObject *PylibMC_Client_disconnect_all(PylibMC_Client *);
 static PyObject *PylibMC_Client_clone(PylibMC_Client *);
+static PyObject *PylibMC_ErrFromMemcachedWithKey(PylibMC_Client *, const char *,
+        memcached_return, const char *, Py_ssize_t);
 static PyObject *PylibMC_ErrFromMemcached(PylibMC_Client *, const char *,
         memcached_return);
 static PyObject *_PylibMC_Unpickle(const char *, size_t);
@@ -287,6 +289,8 @@ static bool _PylibMC_IncrDecr(PylibMC_Client*, pylibmc_incr*, size_t);
 static PyMethodDef PylibMC_ClientType_methods[] = {
     {"get", (PyCFunction)PylibMC_Client_get, METH_O,
         "Retrieve a key from a memcached."},
+    {"gets", (PyCFunction)PylibMC_Client_gets, METH_O,
+        "Retrieve a key and cas_id from a memcached."},
     {"set", (PyCFunction)PylibMC_Client_set, METH_VARARGS|METH_KEYWORDS,
         "Set a key unconditionally."},
     {"replace", (PyCFunction)PylibMC_Client_replace, METH_VARARGS|METH_KEYWORDS,
@@ -297,6 +301,8 @@ static PyMethodDef PylibMC_ClientType_methods[] = {
         "Prepend data to  a key."},
     {"append", (PyCFunction)PylibMC_Client_append, METH_VARARGS|METH_KEYWORDS,
         "Append data to a key."},
+    {"cas", (PyCFunction)PylibMC_Client_cas, METH_VARARGS|METH_KEYWORDS,
+        "Attempt to compare-and-store a key by CAS ID."},
     {"delete", (PyCFunction)PylibMC_Client_delete, METH_VARARGS,
         "Delete a key."},
     {"incr", (PyCFunction)PylibMC_Client_incr, METH_VARARGS,
