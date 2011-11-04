@@ -1,6 +1,8 @@
 import os
 import sys
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
+
+## Command-line argument parsing
 
 # --with-zlib: use zlib for compressing and decompressing
 # --without-zlib: ^ negated
@@ -32,6 +34,9 @@ for arg in sys.argv[1:]:
     elif arg == "--without-zlib":
         use_zlib = False
         continue
+    elif arg == "--with-sasl2":
+        libs.append("sasl2")
+        continue
     elif arg == "--gen-setup":
         cmd = arg[2:]
     elif "=" in arg:
@@ -49,6 +54,20 @@ for pkgdir in pkgdirs:
 if use_zlib:
     libs.append("z")
     defs.append(("USE_ZLIB", None))
+
+## OS X non-PPC workaround
+
+# Apple OS X 10.6 with Xcode 4 have Python compiled with PPC but they removed
+# support for compiling with that arch, so we have to override ARCHFLAGS.
+if sys.platform == "darwin" and not os.environ.get("ARCHFLAGS"):
+    compiler_dirn = "/usr/libexec/gcc/darwin"
+    if os.path.exists(compiler_dirn):
+        dir_items = os.listdir(compiler_dirn)
+        if "ppc" not in dir_items:
+            print >>sys.stderr, "enabling osx-specific ARCHFLAGS/ppc hack"
+            os.environ["ARCHFLAGS"] = "-arch i386 -arch x86_64"
+
+## Extension definitions
  
 pylibmc_ext = Extension("_pylibmc", ["_pylibmcmodule.c"],
                         libraries=libs, include_dirs=incdirs,
@@ -74,4 +93,4 @@ setup(name="pylibmc", version=version,
       license="3-clause BSD <http://www.opensource.org/licenses/bsd-license.php>",
       description="Quick and small memcached client for Python",
       long_description=readme_text,
-      ext_modules=[pylibmc_ext], py_modules=["pylibmc"])
+      ext_modules=[pylibmc_ext], packages=["pylibmc"])
